@@ -1615,6 +1615,13 @@ textfield */
     -fx-stroke: -bs-buy;
 }
 
+/* The .chart-line-symbol rules change the color of the legend symbol */
+#charts-dao .default-color0.chart-series-line { -fx-stroke: -bs-buy; }
+#charts-dao .default-color0.chart-line-symbol { -fx-background-color: -bs-buy, -bs-background-color; }
+
+#charts-dao .default-color1.chart-series-line { -fx-stroke: -bs-color-green-4 }
+#charts-dao .default-color1.chart-line-symbol { -fx-background-color: -bs-color-green-4, -bs-background-color; }
+
 #charts .default-color0.chart-series-area-fill {
     -fx-fill: -bs-sell-transparent;
 }

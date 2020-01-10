@@ -42,6 +42,11 @@ public class MovingAverageUtils
             throw new IllegalArgumentException("Simple moving average period must be a positive number.");
         }
 
+        var collectionSize = collection.size();
+        if (collectionSize < period) {
+          return Collections.nCopies(collectionSize, Double.NaN).stream();
+        }
+
         var windows = SlidingWindowSpliterator.windowed(collection, period);
         Stream<Double> averages =
             windows.map(window ->

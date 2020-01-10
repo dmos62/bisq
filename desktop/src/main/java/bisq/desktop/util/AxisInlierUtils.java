@@ -43,7 +43,7 @@ public class AxisInlierUtils {
      * On event, it triggers a recalculation of an axis' range to make the axis resilient to
      * outliers (elsewhere in code refered to as re-ranging to inliers).
      */
-    public static ListChangeListener getListenerToRerangeToInliers(
+    public static ListChangeListener getListenerThatZoomsToInliers(
         NumberAxis axis,
         int maxNumberOfTicks,
         double percentToTrim,
@@ -53,7 +53,7 @@ public class AxisInlierUtils {
             change -> {
                 boolean axisHasBeenInitialized = axis != null;
                 if (axisHasBeenInitialized) {
-                    rerangeToInliers(
+                    zoomToInliers(
                             axis,
                             change.getList(),
                             maxNumberOfTicks,
@@ -69,7 +69,7 @@ public class AxisInlierUtils {
      * The methods describing the arguments passed here are `computeReferenceTickUnit`,
      * `trim`, and `computeInlierThreshold`.
      */
-    public static void rerangeToInliers(
+    public static void zoomToInliers(
         NumberAxis yAxis,
         List<XYChart.Data<Number,Number>> xyValues,
         int maxNumberOfTicks,

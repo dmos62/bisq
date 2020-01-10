@@ -111,11 +111,11 @@ public class SupplyView extends ActivatableView<GridPane, Void> implements DaoSt
             totalBurntFeeAmountTextField, totalLockedUpAmountTextField, totalUnlockingAmountTextField,
             totalUnlockedAmountTextField, totalConfiscatedAmountTextField, totalAmountOfInvalidatedBsqTextField;
     private XYChart.Series<Number, Number> seriesBSQIssued, seriesBSQBurnt, seriesBSQBurntMA;
-    private ListChangeListener changeListenerBSQIssued, changeListenerBSQBurnt;
+    private ListChangeListener changeListenerBSQBurnt;
     private NumberAxis yAxisBSQBurnt;
 
-    private ToggleButton setRangeToInliersSlide;
-    private boolean isSetRangeToInliers = false;
+    private ToggleButton zoomToInliersSlide;
+    private boolean isZoomingToInliers = false;
 
     private int chartMaxNumberOfTicks = 10;
     private double chartPercentToTrim = 5;
@@ -152,9 +152,8 @@ public class SupplyView extends ActivatableView<GridPane, Void> implements DaoSt
     protected void activate() {
         daoFacade.addBsqStateListener(this);
 
-        if (isSetRangeToInliers) {
-            seriesBSQBurnt.getData().addListener(changeListenerBSQBurnt);
-            doFirstRerangeToInliers();
+        if (isZoomingToInliers) {
+            activateZoomingToInliers();
         }
 
         updateWithBsqBlockChainData();
@@ -166,7 +165,7 @@ public class SupplyView extends ActivatableView<GridPane, Void> implements DaoSt
     protected void deactivate() {
         daoFacade.removeBsqStateListener(this);
 
-        seriesBSQBurnt.getData().removeListener(changeListenerBSQBurnt);
+        deactivateZoomingToInliers();
 
         deactivateButtons();
     }
@@ -216,15 +215,15 @@ public class SupplyView extends ActivatableView<GridPane, Void> implements DaoSt
         totalAmountOfInvalidatedBsqTextField = addTopLabelReadOnlyTextField(root, gridRow, 1,
                 Res.get("dao.factsAndFigures.supply.invalidTxs"), Layout.FIRST_ROW_AND_GROUP_DISTANCE).second;
 
-        var buttonTitle = "Set range to inliers"; // Res.get("setting.preferences.useAnimations") // TODO
-        setRangeToInliersSlide = addSlideToggleButton(root, ++gridRow, buttonTitle);
+        var buttonTitle = Res.get("dao.factsAndFigures.supply.burntZoomToInliers");
+        zoomToInliersSlide = addSlideToggleButton(root, ++gridRow, buttonTitle);
 
         seriesBSQBurnt = new XYChart.Series<>();
         seriesBSQBurntMA = new XYChart.Series<>();
 
-        var layeredCharts = createBSQBurntChart(seriesBSQBurnt, seriesBSQBurntMA);
+        var chart = createBSQBurntChart(seriesBSQBurnt, seriesBSQBurntMA);
 
-        var chartPane = wrapInChartPane(layeredCharts);
+        var chartPane = wrapInChartPane(chart);
         root.getChildren().add(chartPane);
     }
 
@@ -248,15 +247,15 @@ public class SupplyView extends ActivatableView<GridPane, Void> implements DaoSt
     private Node createBSQIssuedChart(XYChart.Series<Number,Number> series)
     {
         NumberAxis xAxis = new NumberAxis();
-        configureDefaultAxis(xAxis);
+        configureAxis(xAxis);
         xAxis.setTickLabelFormatter(getTimestampTickLabelFormatter("MMM uu"));
 
         NumberAxis yAxis = new NumberAxis();
-        configureDefaultYAxis(yAxis);
+        configureYAxis(yAxis);
         yAxis.setTickLabelFormatter(BSQPriceTickLabelFormatter);
 
         AreaChart<Number, Number> chart = new AreaChart<>(xAxis, yAxis);
-        configureMainChart(chart);
+        configureChart(chart);
 
         series.setName(Res.get("dao.factsAndFigures.supply.issued"));
         chart.getData().add(series);
@@ -271,72 +270,54 @@ public class SupplyView extends ActivatableView<GridPane, Void> implements DaoSt
     {
         Supplier<NumberAxis> makeXAxis = () -> {
             NumberAxis xAxis = new NumberAxis();
-            configureDefaultAxis(xAxis);
+            configureAxis(xAxis);
             xAxis.setTickLabelFormatter(getTimestampTickLabelFormatter("d MMM"));
             return xAxis;
         };
 
         Supplier<NumberAxis> makeYAxis = () -> {
             NumberAxis yAxis = new NumberAxis();
-            configureDefaultYAxis(yAxis);
+            configureYAxis(yAxis);
             yAxis.setTickLabelFormatter(BSQPriceTickLabelFormatter);
             return yAxis;
         };
 
         seriesBSQBurnt.setName(Res.get("dao.factsAndFigures.supply.burnt"));
 
-        var burntMALabel = "MA"; // TODO Res.get("dao.factsAndFigures.supply.burntMovingAverage");
+        var burntMALabel = Res.get("dao.factsAndFigures.supply.burntMovingAverage");
         seriesBSQBurntMA.setName(burntMALabel);
 
-        // Initialize reranging listener with any of the Y axes.
-        // Which Y axis is chosen doesn't matter, because
-        // LayeredCharts.layerCharts binds them together.
-        var oneOfTheYAxes = makeYAxis.get();
-        //initializeRerangingListener(oneOfTheYAxes);
+        var yAxis = makeYAxis.get();
+        initializeChangeListener(yAxis);
 
-       // var mainChart = new AreaChart<>(makeXAxis.get(), oneOfTheYAxes);
-        var mainChart = new LineChart<>(makeXAxis.get(), oneOfTheYAxes);
-        configureMainChart(mainChart);
-        mainChart.getData().addAll(seriesBSQBurnt, seriesBSQBurntMA);
-        // TODO layered charts nesuveike is karto
-        // isbandziau 2-line linechart
-        //  kai yra 2 series kazkodel nieko nerenderina
-        //  taciau jeigu paspaudi "set rerange inliers" switcha
-        //      tada renderina
+        var chart = new LineChart<>(makeXAxis.get(), yAxis);
 
-        /*
-        var overlayChart = new LineChart<>(makeXAxis.get(), makeYAxis.get());
-        configureOverlayChart(overlayChart);
-        overlayChart.getData().add(seriesBSQBurntMA);
+        chart.getData().addAll(seriesBSQBurnt, seriesBSQBurntMA);
 
-        overlayChart.setCreateSymbols(false);
-        overlayChart.lookup(".default-color0.chart-series-line")
-            .setStyle("-fx-stroke: #dda0dd");
+        configureChart(chart);
+        chart.setCreateSymbols(false);
+        chart.setLegendVisible(true);
 
-        var pane = LayeredCharts.layerCharts(mainChart, overlayChart);
-
-        return pane;
-        */
-        return mainChart;
+        return chart;
     }
 
-    private void initializeRerangingListener(NumberAxis axis) {
+    private void initializeChangeListener(NumberAxis axis) {
         // Keep a class-scope reference. Needed for switching between inliers-only and full chart.
         yAxisBSQBurnt = axis;
 
-        changeListenerBSQBurnt = AxisInlierUtils.getListenerToRerangeToInliers(
+        changeListenerBSQBurnt = AxisInlierUtils.getListenerThatZoomsToInliers(
                 yAxisBSQBurnt, chartMaxNumberOfTicks, chartPercentToTrim, chartHowManyStdDevsConstituteOutlier);
     }
 
-    private void configureDefaultYAxis(NumberAxis axis) {
-        configureDefaultAxis(axis);
+    private void configureYAxis(NumberAxis axis) {
+        configureAxis(axis);
 
         axis.setForceZeroInRange(true);
         axis.setTickLabelGap(5);
         axis.setSide(Side.RIGHT);
     }
 
-    private void configureDefaultAxis(NumberAxis axis) {
+    private void configureAxis(NumberAxis axis) {
         axis.setForceZeroInRange(false);
         axis.setAutoRanging(true);
         axis.setTickMarkVisible(false);
@@ -373,18 +354,14 @@ public class SupplyView extends ActivatableView<GridPane, Void> implements DaoSt
             }
         };
 
-    private <X,Y> void configureMainChart(XYChart<X,Y> chart) {
+    private <X,Y> void configureChart(XYChart<X,Y> chart) {
         chart.setLegendVisible(false);
         chart.setAnimated(false);
         chart.setId("charts-dao");
+
         chart.setMinHeight(300);
         chart.setPrefHeight(300);
-        //chart.setCreateSymbols(true); // TODO areachart ir linechart bruozas
         chart.setPadding(new Insets(0));
-    }
-
-    private <X,Y> void configureOverlayChart(XYChart<X,Y> chart) {
-        configureMainChart(chart);
     }
 
     private Pane wrapInChartPane(Node child) {
@@ -429,15 +406,17 @@ public class SupplyView extends ActivatableView<GridPane, Void> implements DaoSt
         String minusSign = totalAmountOfInvalidatedBsq.isPositive() ? "-" : "";
         totalAmountOfInvalidatedBsqTextField.setText(minusSign + bsqFormatter.formatAmountWithGroupSeparatorAndCode(totalAmountOfInvalidatedBsq));
 
-        updateCharts();
+        updateChartSeries();
     }
 
-    private void updateCharts() {
-        seriesBSQIssued.getData().clear();
-        seriesBSQBurnt.getData().clear();
-        seriesBSQBurntMA.getData().clear();
+    private void updateChartSeries() {
+        var updatedBurntBsq = updateBSQBurnt();
+        updateBSQBurntMA(updatedBurntBsq);
+        updateBSQIssued();
+    }
 
-        // BSQ burnt
+    private List<XYChart.Data<Number, Number>> updateBSQBurnt() {
+        seriesBSQBurnt.getData().clear();
 
         Set<Tx> burntTxs = new HashSet<>(daoStateService.getBurntFeeTxs());
         burntTxs.addAll(daoStateService.getInvalidTxs());
@@ -450,7 +429,9 @@ public class SupplyView extends ActivatableView<GridPane, Void> implements DaoSt
         List<XYChart.Data<Number, Number>> updatedBurntBsq = burntBsqByDay.keySet().stream()
                 .map(date -> {
                     ZonedDateTime zonedDateTime = date.atStartOfDay(ZoneId.systemDefault());
-                    return new XYChart.Data<Number, Number>(zonedDateTime.toInstant().getEpochSecond(), burntBsqByDay.get(date)
+                    return new XYChart.Data<Number, Number>(
+                        zonedDateTime.toInstant().getEpochSecond(),
+                        burntBsqByDay.get(date)
                             .stream()
                             .mapToDouble(Tx::getBurntBsq)
                             .sum()
@@ -460,10 +441,28 @@ public class SupplyView extends ActivatableView<GridPane, Void> implements DaoSt
 
         seriesBSQBurnt.getData().setAll(updatedBurntBsq);
 
-        // BSQ burnt MA
+        return updatedBurntBsq;
+    }
 
-        var burntBsqXValues = updatedBurntBsq.stream().map(xyData -> xyData.getXValue());
-        var burntBsqYValues = updatedBurntBsq.stream().map(xyData -> xyData.getYValue());
+    private void updateBSQBurntMA(List<XYChart.Data<Number, Number>> updatedBurntBsq) {
+        seriesBSQBurntMA.getData().clear();
+
+        Comparator<Number> compareXChronology =
+          (x1, x2) -> x1.intValue() - x2.intValue();
+
+        Comparator<XYChart.Data<Number, Number>> compareXyDataChronology =
+          (xyData1, xyData2) ->
+          compareXChronology.compare(
+              xyData1.getXValue(),
+              xyData2.getXValue());
+
+        var sortedUpdatedBurntBsq = updatedBurntBsq
+            .stream()
+            .sorted(compareXyDataChronology)
+            .collect(Collectors.toList());
+
+        var burntBsqXValues = sortedUpdatedBurntBsq.stream().map(xyData -> xyData.getXValue());
+        var burntBsqYValues = sortedUpdatedBurntBsq.stream().map(xyData -> xyData.getYValue());
 
         var maPeriod = 15;
         var burntBsqMAYValues =
@@ -471,16 +470,19 @@ public class SupplyView extends ActivatableView<GridPane, Void> implements DaoSt
                     burntBsqYValues.collect(Collectors.toList()),
                     maPeriod);
 
-        BiFunction<Number,Double,XYChart.Data<Number,Number>> zipXAndYTogether =
+        BiFunction<Number,Double,XYChart.Data<Number,Number>> xyToXyData =
             (xValue, yValue) -> new XYChart.Data<Number, Number>(xValue, yValue);
 
         List<XYChart.Data<Number,Number>> burntBsqMA =
-            zip(burntBsqXValues, burntBsqMAYValues, zipXAndYTogether)
+            zip(burntBsqXValues, burntBsqMAYValues, xyToXyData)
+            .filter( xyData -> Double.isFinite(xyData.getYValue().doubleValue()) )
             .collect(Collectors.toList());
 
         seriesBSQBurntMA.getData().setAll(burntBsqMA);
+    }
 
-        // BSQ issued
+    private void updateBSQIssued() {
+        seriesBSQIssued.getData().clear();
 
         Stream<Issuance> bsqByCompensation = daoStateService.getIssuanceSet(IssuanceType.COMPENSATION).stream()
                 .sorted(Comparator.comparing(Issuance::getChainHeight));
@@ -506,28 +508,41 @@ public class SupplyView extends ActivatableView<GridPane, Void> implements DaoSt
     }
 
     private void activateButtons() {
-        setRangeToInliersSlide.setSelected(isSetRangeToInliers);
-        setRangeToInliersSlide.setOnAction(e -> handleSetRangeToInliersSlide(!isSetRangeToInliers));
+        zoomToInliersSlide.setSelected(isZoomingToInliers);
+        zoomToInliersSlide.setOnAction(e -> handleZoomToInliersSlide(!isZoomingToInliers));
     }
 
     private void deactivateButtons() {
-        setRangeToInliersSlide.setOnAction(null);
+        zoomToInliersSlide.setOnAction(null);
     }
 
-    private void handleSetRangeToInliersSlide(boolean shouldActivate) {
-        isSetRangeToInliers = !isSetRangeToInliers;
+    private void handleZoomToInliersSlide(boolean shouldActivate) {
+        isZoomingToInliers = !isZoomingToInliers;
         if (shouldActivate) {
-            seriesBSQBurnt.getData().addListener(changeListenerBSQBurnt);
-            doFirstRerangeToInliers();
+            activateZoomingToInliers();
         } else {
-            seriesBSQBurnt.getData().removeListener(changeListenerBSQBurnt);
-            yAxisBSQBurnt.autoRangingProperty().set(true);
+            deactivateZoomingToInliers();
         }
     }
 
-    private void doFirstRerangeToInliers() {
+    private void activateZoomingToInliers() {
+        seriesBSQBurnt.getData().addListener(changeListenerBSQBurnt);
+
+        // Initial zoom has to be triggered manually; otherwise, it
+        // would be triggered only on a change event in the series
+        triggerZoomToInliers();
+    }
+
+    private void deactivateZoomingToInliers() {
+        seriesBSQBurnt.getData().removeListener(changeListenerBSQBurnt);
+
+        // Reactivate automatic ranging
+        yAxisBSQBurnt.autoRangingProperty().set(true);
+    }
+
+    private void triggerZoomToInliers() {
         var xyValues = seriesBSQBurnt.getData();
-        AxisInlierUtils.rerangeToInliers(
+        AxisInlierUtils.zoomToInliers(
                 yAxisBSQBurnt,
                 xyValues,
                 chartMaxNumberOfTicks,
@@ -536,8 +551,14 @@ public class SupplyView extends ActivatableView<GridPane, Void> implements DaoSt
                 );
     }
 
-    // When Guava version is bumped to at least 21.0, can be replaced with com.google.common.collect.Streams.zip
-    public static <L, R, T> Stream<T> zip(Stream<L> leftStream, Stream<R> rightStream, BiFunction<L, R, T> combiner) {
+    // When Guava version is bumped to at least 21.0,
+    // can be replaced with com.google.common.collect.Streams.zip
+    public static <L, R, T> Stream<T> zip(
+            Stream<L> leftStream,
+            Stream<R> rightStream,
+            BiFunction<L, R, T> combiner
+            )
+    {
         var lefts = leftStream.spliterator();
         var rights = rightStream.spliterator();
         var spliterator =
